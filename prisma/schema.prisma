@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Transporter {
+  id        String   @id @default(uuid())
+  name      String
+  gstin     String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+}
+
+model Station {
+  id                    Int    @id @default(autoincrement())
+  stationName           String
+  branchName            String
+  shortNameForBranch    String
+  subBranchesName       String
+  address               String
+  typeOfOffice          String
+  typeOfService         String
+  laborChargeRateOn     String
+  typeOfLoading         String
+  laborChargeRateAmount Float
+}
+
+
+model User {
+  id                 Int    @id @default(autoincrement())
+  empName            String
+  empMobileNo        String
+  roleOfUser         String
+  panOrAadhaarOfUser String
+  typeOfUserRights   String
+  branchName         String
+  email              String @unique // Make sure it's a string and unique
+}
+
+
+model ConsignorConsignee {
+  id                   Int     @id @default(autoincrement())
+  locationID           String
+  gstin                String      @unique
+  pan                  String
+  aadhaar              String
+  mobileNo             String
+  name                 String
+  address              String
+  partyBillingType     String
+  rateAmount           Float
+  ratePeriod           String
+  labourChargeIncluded Boolean
+  biltyChargeIncluded  Boolean
+  doorDeliveryCharge   Float
+  accountNo            String
+  ifscCode             String
+  upiIdOrMobileNo      String
+}
+
+model TruckDetails {
+  id                       Int      @id @default(autoincrement())
+  truckNo                  String
+  ownedOrRented            String
+  truckProviderCompanyName String
+  truckProviderGstInOrPan  String
+  truckProviderContactNo   String
+  truckProviderContactName String
+  freightCharge            Float
+  driverName               String
+  driverMobileNo           String
+  driverLicenseNo          String
+  typeOfTruck              String
+  truckExpiry              DateTime
+  weightOfTruck            Float
+  nationalPermit           Boolean
+  brand                    String
+  rtoLicenseNo             String
+  fastag                   Boolean
+  accountNo                String
+  fastagProvider           String
+  dieselOrPetrol           String
+  typeOfFuelCard           String
+  cardNo                   String
+  insurance                Boolean
+  insuranceProvider        String
+  insuranceAccountNo       String
+  premiumAmount            Float
+  insurancePeriod          String
+  activeLoan               Boolean
+  loanProvider             String
+  interest                 Float
+  loanAmount               Float
+  loanPeriod               String
+}
+
+model ItemDetails {
+  id              Int    @id @default(autoincrement())
+  locationID      String
+  itemName        String
+  hsnCode         String
+  typeOfPackaging String
+  size            String
+  rate            Float
+}
+
+model ServiceProviderDetails {
+  id                   Int    @id @default(autoincrement())
+  gstin                String
+  typeOfService        String
+  empName              String
+  empMobileNo          String
+  empEmailId           String
+  commissionRateType   String
+  commissionRateAmount Float
+}
+
+model Order {
+  id               String    @id @default(uuid())
+  customerId       Int?
+  eWayID           String?
+  statusId         Int?
+  truckId          Int?
+  consignmentId    Int?
+
+  invoiceKey       String?
+  invoiceFileName  String?
+
+  orderDate        DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  consignorName    String?    // nullable
+  consignorGstin   String?    // nullable
+  fromAddress      String?    // nullable
+  consignorMobile  String?    // nullable
+  eWayBillNo       String?    // nullable
+  eWayBillExp      DateTime?  // nullable
+
+  // Add relations here as needed
+}
+
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+

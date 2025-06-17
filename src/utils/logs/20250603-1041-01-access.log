@@ -1,0 +1,2 @@
+127.0.0.1 - GET /health-check 200 11 - 3.387 ms 2025-06-02T11:56:05.272Z
+127.0.0.1 - POST /api/transporters/upload-csv 200 60 - 392.021 ms 2025-06-02T12:09:57.796Z
