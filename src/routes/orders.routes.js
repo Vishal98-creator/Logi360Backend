@@ -19,5 +19,6 @@ orderRouter.post("/save-order-draft", orderDetails);// add status to draft
 
 orderRouter.post("/generateBuilty", orderDetails);// (transporter table me logo ki details rhegi)
 
+//order
 
 module.exports = orderRouter;
