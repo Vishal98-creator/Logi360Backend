@@ -10,4 +10,4 @@ orderRouter.post("/uploade-additional-doc", orderDetails); //integrate this new 
 //get apis
 orderRouter.post("/get-invoice", getSignedInvoiceUrl); 
 orderRouter.post("/getorderDetails", orderDetails);// get order details
-//create order
+
