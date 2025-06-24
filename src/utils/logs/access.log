@@ -59,3 +59,12 @@
 127.0.0.1 - POST /api/orders/create-order/generateBilty 404 254 - 11.661 ms 2025-06-24T07:47:05.670Z
 127.0.0.1 - POST /api/orders/create-order/generateBilty 200 201330 - 9.421 ms 2025-06-24T07:47:52.778Z
 127.0.0.1 - POST /api/orders/create-order/generateBilty 200 201330 - 10.067 ms 2025-06-24T08:00:27.433Z
+127.0.0.1 - POST /api/orders/uploade-invoice 200 604 - 17471.958 ms 2025-06-24T08:33:33.713Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 200 572 - 6.942 ms 2025-06-24T08:43:13.093Z
+127.0.0.1 - POST /api/orders/create-order/generateBilty 200 201330 - 10.665 ms 2025-06-24T08:48:43.629Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 500 81 - 827.158 ms 2025-06-24T09:43:35.909Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 200 580 - 3968.187 ms 2025-06-24T09:45:43.963Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 200 584 - 749.433 ms 2025-06-24T09:46:20.395Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 200 618 - 2000.332 ms 2025-06-24T09:56:24.907Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 500 132 - 11151.686 ms 2025-06-24T09:59:52.837Z
+127.0.0.1 - POST /api/orders/uploade-invoice-demo?invoice 200 618 - 3873.269 ms 2025-06-24T10:00:10.506Z

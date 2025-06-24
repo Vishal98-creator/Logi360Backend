@@ -187,7 +187,7 @@ export const uploadInvoiceGetData = (req, res) => {
 export const uploadeInvoiceDemoData = (req, res) => {
   console.time("TotalTime");
 
-  upload(req, res, function (err) {
+  upload(req, res, async function (err) {
     console.timeEnd("TotalTime");
 
     if (err) {
@@ -198,40 +198,61 @@ export const uploadeInvoiceDemoData = (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
+    // const file = req.file;
+    // const fileKey = `invoices/${Date.now()}-${file.originalname}`;
+
     const file = req.file;
-    const fileKey = `invoices/${Date.now()}-${file.originalname}`;
+    const currentDate = new Date().toISOString().split("T")[0]; 
+    const uniqueSuffix = randomUUID();
+    const folderPath = `invoices/${currentDate}-${uniqueSuffix}`;
+    const fileKey = `${folderPath}/${file.originalname}`;
 
+    try {
+      console.time("S3Upload");
+      const command = new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: fileKey,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      });
 
-    return res.status(200).json(
-      {
-        "message": "Invoice uploaded and data extracted",
-        "data": {
-            "invoiceKey": "invoices/1750410711547-Consignor invoice.jpeg",
-            "invoiceFileName": "Consignor invoice.jpeg"
+      await s3.send(command);
+      console.timeEnd("S3Upload");
+
+      return res.status(200).json({
+        message: "Invoice uploaded and data extracted",
+        data: {
+          invoiceKey: fileKey,
+          invoiceFileName: file.originalname,
         },
-        "structuredData": {
-            "customer_details": {
-                "gstin": "23AEIPR5571B1ZM",
-                "address": "43, Mukadamganj Galgala Jabalpur, Madya Pradesh",
-                "eway_bill": {
-                    "number": "111945489327",
-                    "expiry_date": "Not provided"
-                },
-                "order_details": [
-                    {
-                        "item": "ARECANUT AREGERE",
-                        "quantity": "1750",
-                        "price": "558,338.00"
-                    }
-                ]
+        structuredData: {
+          customer_details: {
+            gstin: "23AEIPR5571B1ZM",
+            address: "43, Mukadamganj Galgala Jabalpur, Madya Pradesh",
+            eway_bill: {
+              number: "111945489327",
+              expiry_date: "Not provided"
             },
-            "supplier_details": {
-                "name": "SPANDAN ENTERPRISES",
-                "gstin": "29ALYPM9169K1ZR",
-                "address": "Betelnut Merchants, Alvekodi., KUMTA-581343"
-            }
+            order_details: [
+              {
+                item: "ARECANUT AREGERE",
+                quantity: "1750",
+                price: "558,338.00"
+              }
+            ]
+          },
+          supplier_details: {
+            name: "SPANDAN ENTERPRISES",
+            gstin: "29ALYPM9169K1ZR",
+            address: "Betelnut Merchants, Alvekodi., KUMTA-581343"
+          }
         }
-    });
+      });
+
+    } catch (uploadError) {
+      console.error("S3 upload failed:", uploadError);
+      return res.status(500).json({ message: "Failed to upload invoice to S3", error: uploadError.message });
+    }
   });
 };
 
