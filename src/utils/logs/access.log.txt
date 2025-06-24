@@ -1,10 +1,2 @@
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250603-1041-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250604-0111-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250607-1037-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250609-1026-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250610-1019-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250611-1033-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250612-0030-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250613-1318-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250615-1548-01-access.log
-C:\Users\user\Documents\vidit2\logi360\REST-Back-end\Logi360\src\utils\logs\20250617-1003-01-access.log
+C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250623-0202-01-access.log
+C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250624-1006-01-access.log

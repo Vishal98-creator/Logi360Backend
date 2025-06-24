@@ -10,8 +10,9 @@ const cors = require('cors');
 const morgan = require('morgan');
 const { fileLogger, consoleLogger } = require('./utils/logger');
 
-const masterRoute = require('./routes/transporter.routes');
-const orderRoutes = require('./routes/orders.routes');
+// const masterRoute = require('./routes/transporter.routes');
+// const orderRoutes = require('./routes/orders.routes');
+const auth = require('./routes/auth');
 
 const app = express();
 app.use(cors());
@@ -24,7 +25,8 @@ app.get('/health-check', (req, res) => {
   res.send('Health check successful');
 });
 
-app.use('/api/master-data', masterRoute);
-app.use('/api/orders', orderRoutes);
+// app.use('/api/master-data', masterRoute);
+// app.use('/api/orders', orderRoutes);
+app.use('/api/auth',auth);
 
 module.exports = app;
