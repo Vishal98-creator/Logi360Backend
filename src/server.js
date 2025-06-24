@@ -1,10 +1,13 @@
-const app = require('./app');
-const prisma = require('./utils/prisma');
-const { execSync } = require('child_process');
+import app from './app.js';
+import prisma from './utils/prisma.js';
+import { execSync } from 'child_process';
+import { URL } from 'url';
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
+    // Optional schema push:
     // console.log('📦 Syncing Prisma schema to DB...');
     // execSync('npx prisma db push', { stdio: 'inherit' });
 

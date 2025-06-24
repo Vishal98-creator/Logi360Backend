@@ -1,11 +1,14 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const multer = require('multer');
-const { PrismaClient } = require('@prisma/client');
-const { TextractClient, DetectDocumentTextCommand } = require("@aws-sdk/client-textract");
-const { OpenAI } = require('openai');
-const { parse } = require('json2csv');  // For CSV generation
-const fs = require('fs');
-const path = require('path');
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import multer from 'multer';
+import { randomUUID } from 'crypto';
+import { PrismaClient } from '@prisma/client';
+import { TextractClient, DetectDocumentTextCommand } from '@aws-sdk/client-textract';
+import { OpenAI } from 'openai';
+import { parse } from 'json2csv';
+import fs from 'fs';
+import path from 'path';
+
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const prisma = new PrismaClient();
 
@@ -25,12 +28,10 @@ const textract = new TextractClient({
   }
 });
 
-// OpenAI setup
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Extract raw text using DetectDocumentText
 async function extractRawTextFromImage(buffer) {
   const params = {
     Document: { Bytes: buffer }
@@ -50,7 +51,6 @@ async function extractRawTextFromImage(buffer) {
   return extractedText;
 }
 
-// Enhance the prompt and pass to OpenAI for structured extraction
 async function extractStructuredDataFromText(extractedText) {
   const prompt = `
   I have the following invoice text extracted from AWS Textract:
@@ -66,6 +66,7 @@ async function extractStructuredDataFromText(extractedText) {
   {
     "customer_details": {
       "gstin": "GSTIN",
+      "address": "customer address"
       "eway_bill": {
         "number": "E-WAY BILL NO.",
         "expiry_date": "EXPIRY DATE"
@@ -87,7 +88,7 @@ async function extractStructuredDataFromText(extractedText) {
   `;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-4",  // Or use the appropriate model
+    model: "gpt-4",  
     messages: [
       {
         role: "system",
@@ -100,31 +101,29 @@ async function extractStructuredDataFromText(extractedText) {
     ],
   });
 
-  // Extract the raw response text, which should be in JSON format
   const responseText = completion.choices[0].message.content;
 
-  // Clean up the response if it includes extra narrative
   let structuredData = {};
 
   try {
-    // Try parsing the response as JSON
     structuredData = JSON.parse(responseText);
   } catch (err) {
     console.error("Error parsing OpenAI response as JSON:", err);
-    // Handle the case when the response is not valid JSON (fallback or return an error)
     throw new Error("Failed to parse OpenAI response into JSON.");
   }
 
   return structuredData;
 }
 
-// Store temporarily in memory or disk
+
 const storage = multer.memoryStorage();
 const upload = multer({ storage }).single('invoice');
 
-// Upload invoice to S3 and create order in DB
-exports.uploadInvoiceAndCreateOrder = (req, res) => {
+const multifileUploade = multer({ storage }).array('files', 10);
+
+export const uploadInvoiceGetData = (req, res) => {
   console.time("TotalTime");
+
   upload(req, res, async function (err) {
     console.timeEnd("TotalTime");
 
@@ -138,9 +137,12 @@ exports.uploadInvoiceAndCreateOrder = (req, res) => {
 
     try {
       const file = req.file;
-      const fileKey = `invoices/${Date.now()}-${file.originalname}`;
+      const currentDate = new Date().toISOString().split("T")[0]; 
+      const uniqueSuffix = randomUUID();
+      const folderPath = `invoices/${currentDate}-${uniqueSuffix}`;
+      const fileKey = `${folderPath}/${file.originalname}`;
 
-      // 1. Upload to S3
+
       console.time("S3Upload");
       const command = new PutObjectCommand({
         Bucket: process.env.S3_BUCKET_NAME,
@@ -151,66 +153,430 @@ exports.uploadInvoiceAndCreateOrder = (req, res) => {
       await s3.send(command);
       console.timeEnd("S3Upload");
 
-      // 2. Extract raw text using DetectDocumentText
       console.time("Textract");
       const extractedText = await extractRawTextFromImage(file.buffer);
       console.log("Extracted Invoice Text:", extractedText);
       console.timeEnd("Textract");
 
-      // 3. Extract structured data from OpenAI
       console.time("OpenAI");
-      const structuredData = await extractStructuredDataFromText(extractedText);
-      console.log("Extracted Structured Data:", structuredData);
+      const structuredText = await extractStructuredDataFromText(extractedText);
+      console.log("Extracted Structured Data (Plain Text):\n", structuredText);
       console.timeEnd("OpenAI");
 
-      // 4. Create DB entry
-      console.time("DBWrite");
-      const newOrder = await prisma.order.create({
+
+      return res.status(200).json({
+        message: "Invoice uploaded and data extracted",
         data: {
           invoiceKey: fileKey,
           invoiceFileName: file.originalname
-        }
+        },
+        structuredData: structuredText
       });
-      console.timeEnd("DBWrite");
-
-      // 5. Process the `order_details` array for CSV
-      const orderDetails = structuredData.customer_details.order_details;
-
-      // Ensure that `order_details` has the correct structure
-      if (Array.isArray(orderDetails) && orderDetails.length > 0) {
-        // Convert to CSV format
-        const csvData = parse(orderDetails);  // Convert order details to CSV format
-        const txtData = JSON.stringify(structuredData, null, 2);  // Convert to formatted text for .txt
-
-        // Set response headers for file download
-        res.setHeader('Content-Type', 'application/json');
-        res.status(200).json({
-          message: "Invoice uploaded, order created, and text extracted",
-          orderId: newOrder.id,
-          fileKey: fileKey,
-          structuredData: structuredData,
-          files: {
-            txt: txtData,
-            csv: csvData,
-            json: JSON.stringify(structuredData)
-          }
-        });
-      } else {
-        throw new Error("Order details are empty or not properly structured");
-      }
 
     } catch (err) {
       console.error("Upload or Textract error:", err);
-      res.status(500).json({ error: "Upload or Textract failed", details: err.message });
+      return res.status(500).json({
+        error: "Upload or Textract failed",
+        details: err.message
+      });
     }
   });
 };
 
 
+export const uploadeInvoiceDemoData = (req, res) => {
+  console.time("TotalTime");
+
+  upload(req, res, function (err) {
+    console.timeEnd("TotalTime");
+
+    if (err) {
+      return res.status(500).json({ error: "Multer error", details: err.message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const file = req.file;
+    const fileKey = `invoices/${Date.now()}-${file.originalname}`;
 
 
-//get invoice form S3
-exports.getSignedInvoiceUrl = async (req, res) => {
+    return res.status(200).json(
+      {
+        "message": "Invoice uploaded and data extracted",
+        "data": {
+            "invoiceKey": "invoices/1750410711547-Consignor invoice.jpeg",
+            "invoiceFileName": "Consignor invoice.jpeg"
+        },
+        "structuredData": {
+            "customer_details": {
+                "gstin": "23AEIPR5571B1ZM",
+                "address": "43, Mukadamganj Galgala Jabalpur, Madya Pradesh",
+                "eway_bill": {
+                    "number": "111945489327",
+                    "expiry_date": "Not provided"
+                },
+                "order_details": [
+                    {
+                        "item": "ARECANUT AREGERE",
+                        "quantity": "1750",
+                        "price": "558,338.00"
+                    }
+                ]
+            },
+            "supplier_details": {
+                "name": "SPANDAN ENTERPRISES",
+                "gstin": "29ALYPM9169K1ZR",
+                "address": "Betelnut Merchants, Alvekodi., KUMTA-581343"
+            }
+        }
+    });
+  });
+};
+
+
+
+export const uploadAdditionalDocs = async (req, res) => {
+  console.time("TotalTime");
+ 
+  multifileUploade(req, res, async function (err) {
+    if (err) {
+      console.error("Multer error:", err);
+      return res.status(400).json({ success: false, message: 'File upload error', error: err.message });
+    }
+    const { invoiceKey } = req.body;
+
+    const files = req.files;
+    const folderPath = invoiceKey.substring(0, invoiceKey.lastIndexOf('/'));
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    }
+
+    try {
+      console.time("S3Upload");
+
+      const uploadedFiles = [];
+
+      for (const file of files) {
+        const fileKey = `${folderPath}/${Date.now()}-${file.originalname}`;
+
+        const command = new PutObjectCommand({
+          Bucket: process.env.S3_BUCKET_NAME,
+          Key: fileKey,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        });
+
+        await s3.send(command);
+
+        uploadedFiles.push({
+          fileName: file.originalname,
+          fileKey,
+          url: `https://${process.env.S3_BUCKET_NAME}.s3.amazonaws.com/${fileKey}`,
+        });
+      }
+
+      console.timeEnd("S3Upload");
+
+      return res.status(200).json({
+        success: true,
+        message: 'Files uploaded successfully',
+        data: {
+          invoiceKey,
+          invoiceFileName: invoiceKey.split('/').pop()
+        },
+        files: uploadedFiles
+      });
+
+    } catch (uploadError) {
+      console.error("S3 upload error:", uploadError);
+      return res.status(500).json({ success: false, message: 'S3 upload failed', error: uploadError.message });
+    } finally {
+      console.timeEnd("TotalTime");
+    }
+  });
+};
+
+export const createOrderConsignorConsignee = async (req, res) => {
+  try {
+    const { transporterId, invoicefile, structuredData } = req.body;
+    console.log("invoicefile",invoicefile.invoiceKey)
+    // console.log("transporterId",transporterId)
+    // console.log("structuredData",structuredData)
+
+    if (!transporterId || !structuredData?.customer_details?.gstin || !structuredData?.supplier_details?.gstin) {
+      return res.status(400).json({ error: "Missing required GSTIN or transporterId" });
+    }
+
+    const consigneeGSTIN = structuredData.customer_details.gstin;
+    const consignorGSTIN = structuredData.supplier_details.gstin;
+    // console.log("consigneeGSTIN",consigneeGSTIN)
+    // console.log("consignorGSTIN",consignorGSTIN)
+
+    let consignor = await prisma.consignorConsignee.findFirst({
+      where: {
+        gstin: consignorGSTIN,
+        type: "CONSIGNOR"
+      }
+    });
+
+    if (!consignor) {
+      consignor = await prisma.consignorConsignee.create({
+        data: {
+          gstin: consignorGSTIN,
+          type: "CONSIGNOR",
+          name: structuredData.supplier_details.name,
+          address: structuredData.supplier_details.address,
+          transporterId: transporterId,
+
+          pan: "",
+          aadhaar: "",
+          mobileNo: "",
+          partyBillingType: "",
+          ratePeriod: "",
+          labourChargeIncluded: false,
+          biltyChargeIncluded: false,
+          accountNo: "",
+          ifscCode: "",
+          upiIdOrMobileNo: ""
+        }
+      });
+    }
+
+    let consignee = await prisma.consignorConsignee.findFirst({
+      where: {
+        gstin: consigneeGSTIN,
+        type: "CONSIGNEE"
+      }
+    });
+
+    if (!consignee) {
+      consignee = await prisma.consignorConsignee.create({
+        data: {
+          gstin: consigneeGSTIN,
+          type: "CONSIGNEE",
+          name: "", 
+          address: "",
+          transporterId: transporterId,
+
+          pan: "",
+          aadhaar: "",
+          mobileNo: "",
+          partyBillingType: "",
+          ratePeriod: "",
+          labourChargeIncluded: false,
+          biltyChargeIncluded: false,
+          accountNo: "",
+          ifscCode: "",
+          upiIdOrMobileNo: ""
+        }
+      });
+    }
+
+
+    const transporter = await prisma.transporter.findUnique({
+      where: { transporterId: transporterId }
+    });
+
+    if (!transporter) {
+      return res.status(404).json({ error: "Transporter not found" });
+    }
+
+
+    const newOrder = await prisma.order.create({
+      data: {
+        orderId: Date.now().toString(),
+        invoiceKey: invoicefile.invoiceKey,
+        biltyKey: null,
+        biltyNumber: null,
+        fromAddress: structuredData.supplier_details.address,
+        toAddress: structuredData?.customer_details?.toAddress, 
+        transporterId: transporterId,
+        deliveryType: null,
+        statusId: null,
+        weight: null,
+        customerId: consignor.customerId, 
+        payMode: null
+      }
+    });
+
+    return res.status(201).json({
+      message: "Consignor/Consignee verified and order created",
+      orderId: newOrder.orderId,
+      consignorId: consignor.customerId,
+      consigneeId: consignee.customerId
+    });
+
+  } catch (error) {
+    console.error("Error in createConsignorConsignee:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+};
+
+export const createOrderItemDetails = async (req, res) => {
+  try {
+    const { orderId, transporterId, customerId, order_details } = req.body;
+
+    if (!orderId || !transporterId || !customerId || !Array.isArray(order_details)) {
+      return res.status(400).json({ error: "Missing required fields or invalid order_details" });
+    }
+
+    // Step 1: Check if the order exists
+    const existingOrder = await prisma.order.findUnique({
+      where: { orderId }
+    });
+
+    if (!existingOrder) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const createdItems = [];
+    let totalWeight = 0;
+
+    for (const item of order_details) {
+      const {
+        item: itemName,
+        quantity,
+        price,
+        weight,
+        packegingType,
+        hammali
+      } = item;
+
+      const parsedPrice = parseFloat((price || "0").replace(/,/g, ""));
+      const parsedWeight = parseFloat(weight || 0);
+      const parsedHammali = parseFloat(hammali || 0);
+
+      // ✅ Create item with orderId
+      const newItem = await prisma.itemDetails.create({
+        data: {
+          orderId, // ✅ link to order
+          transporterId,
+          customerID: parseInt(customerId),
+          locationId: "",
+          branchName: "",
+          stationName: "",
+          itemName: itemName || "UNKNOWN",
+          per: packegingType || "Box",
+          rate: parsedPrice,
+          size: quantity,
+          hammali: parsedHammali,
+          biltyCharge: 0,
+          doorDeliveryCharge: 0
+        }
+      });
+
+      createdItems.push(newItem);
+      totalWeight += parsedWeight;
+    }
+
+    // ✅ Update total weight in the order
+    await prisma.order.update({
+      where: { orderId },
+      data: {
+        weight: totalWeight
+      }
+    });
+
+    // ✅ Fetch full order with related items
+    const orderWithItems = await prisma.order.findUnique({
+      where: { orderId },
+      include: {
+        items: true
+      }
+    });
+
+    return res.status(200).json({
+      message: "Item details created and order updated successfully",
+      order: orderWithItems
+    });
+
+  } catch (error) {
+    console.error("Error in addItemDetailsAndUpdateOrder:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+};
+
+
+export const createOrderPaymentDetails = async (req, res) => {
+  try {
+    const { orderId, deliveryType, payMode } = req.body;
+
+    if (!orderId || !deliveryType || !payMode) {
+      return res.status(400).json({
+        error: "Missing required fields: orderId, deliveryType, or payMode"
+      });
+    }
+
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { orderId }
+    });
+
+    if (!existingOrder) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+
+    const updatedOrder = await prisma.order.update({
+      where: { orderId },
+      data: {
+        deliveryType,
+        payMode
+      }
+    });
+
+
+    const updatedOrderWithItems = await prisma.order.findUnique({
+      where: { orderId },
+      include: {
+        items: true 
+      }
+    });
+
+    return res.status(200).json({
+      message: "Order updated successfully with deliveryType and payMode",
+      updatedOrder:updatedOrder,
+      order: updatedOrderWithItems
+    });
+
+  } catch (error) {
+    console.error("Error in createOrderPaymentDetails:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      details: error.message
+    });
+  }
+};
+
+
+export const createOrderGenerateBilty = async (req, res) => {
+  try {
+  
+    const fileName = 'bilty.pdf'; 
+    const filePath = path.join(process.cwd(), './uploads', fileName); 
+
+    return res.status(200).sendFile(filePath)
+  } catch (error) {
+    console.error('Error sending PDF:', error);
+    return res.status(500).json({ message: 'Failed to send PDF file', error: error.message });
+  }
+};
+
+
+
+
+
+
+
+
+export const getOrderDetails = (req,res)=>{
+  // get order details for order table and other related tables
+}
+
+export const getSignedInvoiceUrl = async (req, res) => {
   const { orderId } = req.body;
   console.log("orderId.....", orderId);
 
@@ -237,37 +603,5 @@ exports.getSignedInvoiceUrl = async (req, res) => {
   }
 };
 
-exports.orderDetails = async (req, res) => {
-  const {
-    orderId,
-    consignorName,
-    consignorGstin,
-    fromAddress,
-    consignorMobile,
-    eWayBillNo,
-    eWayBillExp
-  } = req.body;
 
-  try {
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        consignorName,
-        consignorGstin,
-        fromAddress,
-        consignorMobile,
-        eWayBillNo,
-        eWayBillExp: eWayBillExp ? new Date(eWayBillExp) : null
-      }
-    });
-
-    return res.status(200).json({
-      message: "Order details updated successfully",
-      order: updatedOrder
-    });
-  } catch (err) {
-    console.error("Error updating order details:", err);
-    return res.status(500).json({ error: "Could not update order details" });
-  }
-};
 

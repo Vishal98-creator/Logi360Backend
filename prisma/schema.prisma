@@ -8,15 +8,130 @@ datasource db {
 }
 
 model Transporter {
-  id        String   @id @default(uuid())
-  name      String
-  gstin     String   @unique
-  logoUrl   String?
-  createdAt DateTime @default(now())
+  transporterId String   @id
+  name          String
+  gstin         String   @unique
+  logoUrl       String?
+  createdAt     DateTime @default(now())
+
+  trucks           TruckDetails[]
+  consignors       ConsignorConsignee[]
+  serviceProviders ServiceProviderDetails[]
+  stations         Station[]
+  users            User[]
+  items            ItemDetails[]
+  orders           Order[]
+}
+
+model TruckDetails {
+  truckId                  Int         @id @default(autoincrement())
+  transporterId            String
+  transporter              Transporter @relation(fields: [transporterId], references: [transporterId])
+  truckNo                  String?
+  ownedOrRented            String?
+  truckProviderCompanyName String?
+  truckProviderGstInOrPan  String?
+  truckProviderContactNo   String?
+  truckProviderContactName String?
+  freightCharge            Float?
+  driverName               String?
+  driverMobileNo           String?
+  driverLicenseNo          String?
+  typeOfTruck              String?
+  truckExpiry              DateTime?
+  weightOfTruck            Float?
+  nationalPermit           Boolean?
+  brand                    String?
+  rtoLicenseNo             String?
+  fastag                   Boolean?
+  accountNo                String?
+  fastagProvider           String?
+  dieselOrPetrol           String?
+  typeOfFuelCard           String?
+  cardNo                   String?
+  insurance                Boolean?
+  insuranceProvider        String?
+  insuranceAccountNo       String?
+  premiumAmount            Float?
+  insurancePeriod          String?
+  activeLoan               Boolean?
+  loanProvider             String?
+  interest                 Float?
+  loanAmount               Float?
+  loanPeriod               String?
+
+  challans       ChallanDetails[]
+  assignedOrders Order[]          @relation("TruckOrders")
+
+  @@unique([transporterId, truckNo])
+}
+
+model ConsignorConsignee {
+  customerId           Int         @id @default(autoincrement())
+  transporterId        String
+  transporter          Transporter @relation(fields: [transporterId], references: [transporterId])
+  invoiceKey           String?
+  type                 String
+  gstin                String
+  pan                  String
+  aadhaar              String
+  mobileNo             String
+  name                 String
+  address              String
+  partyBillingType     String
+  ratePeriod           String
+  labourChargeIncluded Boolean
+  biltyChargeIncluded  Boolean
+  accountNo            String
+  ifscCode             String
+  upiIdOrMobileNo      String
+
+  orders      Order[]
+  payments    Payment[]
+  itemDetails ItemDetails[]
+  challans    ChallanDetails[]
+}
+
+model ItemDetails {
+  itemId        Int                @id @default(autoincrement())
+  locationId    String
+  transporterId String
+  transporter   Transporter        @relation(fields: [transporterId], references: [transporterId])
+  customerID    Int
+  customer      ConsignorConsignee @relation(fields: [customerID], references: [customerId])
+
+  orderId String?
+  order   Order?  @relation("ItemOrder", fields: [orderId], references: [orderId])
+
+  branchName         String
+  stationName        String
+  itemName           String
+  per                String
+  rate               Float
+  size               String
+  hammali            Float
+  biltyCharge        Float
+  doorDeliveryCharge Float
+}
+
+model ServiceProviderDetails {
+  serviceProviderId    Int         @id @default(autoincrement())
+  transporterId        String
+  transporter          Transporter @relation(fields: [transporterId], references: [transporterId])
+  gstin                String
+  typeOfService        String
+  empName              String
+  empMobileNo          String
+  empEmailId           String
+  commissionRateType   String
+  commissionRateAmount Float
 }
 
 model Station {
-  id                    Int    @id @default(autoincrement())
+  locationId            String      @id
+  empID                 Int
+  transporterId         String
+  transporter           Transporter @relation(fields: [transporterId], references: [transporterId])
   stationName           String
   branchName            String
   shortNameForBranch    String
@@ -29,126 +144,142 @@ model Station {
   laborChargeRateAmount Float
 }
 
-
 model User {
-  id                 Int    @id @default(autoincrement())
+  empId              Int         @id @default(autoincrement())
+  transporterId      String
+  transporter        Transporter @relation(fields: [transporterId], references: [transporterId])
   empName            String
   empMobileNo        String
   roleOfUser         String
   panOrAadhaarOfUser String
   typeOfUserRights   String
   branchName         String
-  email              String @unique // Make sure it's a string and unique
-}
-
-
-model ConsignorConsignee {
-  id                   Int     @id @default(autoincrement())
-  locationID           String
-  gstin                String      @unique
-  pan                  String
-  aadhaar              String
-  mobileNo             String
-  name                 String
-  address              String
-  partyBillingType     String
-  rateAmount           Float
-  ratePeriod           String
-  labourChargeIncluded Boolean
-  biltyChargeIncluded  Boolean
-  doorDeliveryCharge   Float
-  accountNo            String
-  ifscCode             String
-  upiIdOrMobileNo      String
-}
-
-model TruckDetails {
-  id                       Int      @id @default(autoincrement())
-  truckNo                  String
-  ownedOrRented            String
-  truckProviderCompanyName String
-  truckProviderGstInOrPan  String
-  truckProviderContactNo   String
-  truckProviderContactName String
-  freightCharge            Float
-  driverName               String
-  driverMobileNo           String
-  driverLicenseNo          String
-  typeOfTruck              String
-  truckExpiry              DateTime
-  weightOfTruck            Float
-  nationalPermit           Boolean
-  brand                    String
-  rtoLicenseNo             String
-  fastag                   Boolean
-  accountNo                String
-  fastagProvider           String
-  dieselOrPetrol           String
-  typeOfFuelCard           String
-  cardNo                   String
-  insurance                Boolean
-  insuranceProvider        String
-  insuranceAccountNo       String
-  premiumAmount            Float
-  insurancePeriod          String
-  activeLoan               Boolean
-  loanProvider             String
-  interest                 Float
-  loanAmount               Float
-  loanPeriod               String
-}
-
-model ItemDetails {
-  id              Int    @id @default(autoincrement())
-  locationID      String
-  itemName        String
-  hsnCode         String
-  typeOfPackaging String
-  size            String
-  rate            Float
-}
-
-model ServiceProviderDetails {
-  id                   Int    @id @default(autoincrement())
-  gstin                String
-  typeOfService        String
-  empName              String
-  empMobileNo          String
-  empEmailId           String
-  commissionRateType   String
-  commissionRateAmount Float
 }
 
 model Order {
-  id               String    @id @default(uuid())
-  customerId       Int?
-  eWayID           String?
-  statusId         Int?
-  truckId          Int?
-  consignmentId    Int?
+  orderId         String   @id
+  assignedTruckId Int?
+  biltyKey        String?
+  invoiceKey      String?
+  biltyNumber     String?
+  deliveryType    String?
+  destination     String?
+  payMode         String?
+  toAddress       String?
+  transporterId   String?
+  updatedAt       DateTime @updatedAt
+  weight          Float?
+  eWayID          Int?
+  fromAddress     String?
+  statusId        Int?
+  customerId      Int?
 
-  invoiceKey       String?
-  invoiceFileName  String?
+  // ✅ RELATIONS
+  transporter    Transporter?        @relation(fields: [transporterId], references: [transporterId])
+  assignedTruck  TruckDetails?       @relation("TruckOrders", fields: [assignedTruckId], references: [truckId])
+  customer       ConsignorConsignee? @relation(fields: [customerId], references: [customerId])
+  items          ItemDetails[]       @relation("ItemOrder")
+  orderStatus    OrderStatus?        @relation(fields: [statusId], references: [id])
+  eWay           EwayBillDetails?    @relation(fields: [eWayID], references: [eWayID])
+  paymentID      Int?                @unique
+  payment        Payment?            @relation("OrderPayment") // ✅ ONLY the relation name
+  challanDetails ChallanDetails?
 
-  orderDate        DateTime  @default(now())
-  createdAt        DateTime  @default(now())
-
-  consignorName    String?    // nullable
-  consignorGstin   String?    // nullable
-  fromAddress      String?    // nullable
-  consignorMobile  String?    // nullable
-  eWayBillNo       String?    // nullable
-  eWayBillExp      DateTime?  // nullable
-
-  // Add relations here as needed
+  challanMappings ChallanOrderMap[]
 }
 
+model OrderStatus {
+  id     Int        @id @default(autoincrement())
+  status StatusType
+  orders Order[]
+}
 
-enum OrderStatus {
+enum StatusType {
+  Draft
+  Unallocated
+  Allocated
+  Shipped
+  Delivered
+  Cancelled
+}
+
+model Payment {
+  id              Int                @id @default(autoincrement())
+  orderID         String             @unique
+  order           Order              @relation("OrderPayment", fields: [orderID], references: [orderId])
+  transactionID   String             @unique
+  customerId      Int
+  customer        ConsignorConsignee @relation(fields: [customerId], references: [customerId])
+  amount          Float
+  paymentDate     DateTime           @default(now())
+  paymentType     PaymentType
+  paymentMethod   PaymentMethod
+  status          PaymentStatus
+  referenceNumber String?
+  description     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+enum PaymentType {
+  CREDIT
+  DEBIT
+  TRANSFER
+  REFUND
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  PAYPAL
+  CASH
+}
+
+enum PaymentStatus {
   PENDING
-  PROCESSING
   COMPLETED
+  FAILED
   CANCELLED
 }
 
+model ChallanDetails {
+  challanID            Int                @id @default(autoincrement())
+  challanNo            String
+  destination          String
+  challanDate          DateTime           @default(now())
+  totalWeight          Float
+  totalBiltyCount      Int
+  totalFreight         Float
+  totalDeliveryCharges Float
+  truckId              Int
+  truck                TruckDetails       @relation(fields: [truckId], references: [truckId])
+  customerID           Int
+  customer             ConsignorConsignee @relation(fields: [customerID], references: [customerId])
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  orderId              String?            @unique
+  order                Order?             @relation(fields: [orderId], references: [orderId])
 
+  challanMappings ChallanOrderMap[]
+}
+
+model ChallanOrderMap {
+  challanId Int
+  orderId   String
+
+  challan ChallanDetails @relation(fields: [challanId], references: [challanID])
+  order   Order          @relation(fields: [orderId], references: [orderId])
+
+  @@id([challanId, orderId])
+}
+
+model EwayBillDetails {
+  eWayID          Int      @id @default(autoincrement())
+  ewayBillNumber  String
+  ewayBillDate    DateTime @default(now())
+  ewayBillExpiry  DateTime @default(now())
+  ewayBillDocPath String
+
+  orders Order[]
+}

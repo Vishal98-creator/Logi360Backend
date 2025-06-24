@@ -1,419 +1,189 @@
-const fs = require("fs").promises;
-const XLSX = require("xlsx");
-const { PrismaClient } = require("@prisma/client");
+import XLSX from 'xlsx';
+import { PrismaClient } from '@prisma/client';
+
 const prisma = new PrismaClient();
 
-exports.uploadExcel = async (req, res) => {
-  if (!req.file || !req.file.path) {
-    return res.status(400).json({ error: "No Excel file provided" });
-  }
+const toBoolean = (val) => {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') return val.toLowerCase() === 'true';
+  return false;
+};
 
-  const filePath = req.file.path;
+const toDate = (val) => {
+  const date = new Date(val);
+  return isNaN(date.getTime()) ? null : date;
+};
 
+export const uploadMasterData = async (req, res) => {
   try {
-    // Read the Excel file
-    const workbook = XLSX.readFile(filePath);
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Get all sheet names from the workbook
-    const sheetNames = workbook.SheetNames;
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const response = [];
 
-    // Iterate through each sheet and process data
-    for (let sheetName of sheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const records = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // Parse the sheet into rows
-
-      // Validate the records
-      if (!records || records.length === 0) {
-        console.warn(`No records found in sheet: ${sheetName}`);
-        continue; // Skip if the sheet is empty
+    const insertWithLogging = async (model, tableName, rawData, transformFn) => {
+      try {
+        if (!rawData || rawData.length === 0) {
+          response.push({ table: tableName, inserted: 0, message: 'No data available in the sheet.' });
+          return;
+        }
+        const data = rawData.map(transformFn);
+        const result = await prisma[model].createMany({ data, skipDuplicates: true });
+        if (result.count === 0) {
+          response.push({ table: tableName, inserted: 0, message: 'No new records inserted (likely due to duplicates or constraints).' });
+        } else {
+          response.push({ table: tableName, inserted: result.count });
+        }
+      } catch (err) {
+        console.error(`Error inserting into ${tableName}:`, err);
+        response.push({ table: tableName, error: err.message });
       }
+    };
 
-      // Process data based on sheet names
-      switch (sheetName) {
-        case "Transporter":
-          await processTransporter(records);
-          break;
-        case "Station":
-          await processStation(records);
-          break;
-        case "User":
-          await processUser(records);
-          break;
-        case "ConsignorConsignee":
-          await processConsignorConsignee(records);
-          break;
-        case "TruckDetails":
-          await processTruckDetails(records);
-          break;
-        case "ItemDetails":
-          await processItemDetails(records);
-          break;
-        case "ServiceProviderDetails":
-          await processServiceProviderDetails(records);
-          break;
-        default:
-          console.warn(`Unrecognized sheet: ${sheetName}`);
-      }
+    if (workbook.SheetNames.includes('Transporter')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Transporter']);
+      await insertWithLogging('transporter', 'Transporter', rows, (row) => ({
+        transporterId: row.transporterId,
+        name: row.name,
+        gstin: row.gstin,
+        logoUrl: row.logoUrl,
+        createdAt: toDate(row.createdAt),
+      }));
     }
 
-    // Clean up the file after successful processing
-    await fs.unlink(filePath);
+    if (workbook.SheetNames.includes('TruckDetails')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['TruckDetails']);
+      await insertWithLogging('truckDetails', 'TruckDetails', rows, (row) => ({
+        truckId: row.truckId,
+        transporterId: row.transporterId,
+        truckNo: row.truckNo,
+        ownedOrRented: row.ownedOrRented,
+        truckProviderCompanyName: row.truckProviderCompanyName,
+        truckProviderGstInOrPan: row.truckProviderGstInOrPan,
+        truckProviderContactNo: row.truckProviderContactNo,
+        truckProviderContactName: row.truckProviderContactName,
+        freightCharge: Number(row.freightCharge),
+        driverName: row.driverName,
+        driverMobileNo: row.driverMobileNo,
+        driverLicenseNo: row.driverLicenseNo,
+        typeOfTruck: row.typeOfTruck,
+        truckExpiry: toDate(row.truckExpiry),
+        weightOfTruck: Number(row.weightOfTruck),
+        nationalPermit: toBoolean(row.nationalPermit),
+        brand: row.brand,
+        rtoLicenseNo: row.rtoLicenseNo,
+        fastag: toBoolean(row.fastag),
+        accountNo: row.accountNo,
+        fastagProvider: row.fastagProvider,
+        dieselOrPetrol: row.dieselOrPetrol,
+        typeOfFuelCard: row.typeOfFuelCard,
+        cardNo: row.cardNo,
+        insurance: toBoolean(row.insurance),
+        insuranceProvider: row.insuranceProvider,
+        insuranceAccountNo: row.insuranceAccountNo,
+        premiumAmount: Number(row.premiumAmount),
+        insurancePeriod: row.insurancePeriod,
+        activeLoan: toBoolean(row.activeLoan),
+        loanProvider: row.loanProvider,
+        interest: Number(row.interest),
+        loanAmount: Number(row.loanAmount),
+        loanPeriod: row.loanPeriod,
+      }));
+    }
 
-    return res.status(200).json({
-      message: "Excel file imported successfully",
-    });
+    if (workbook.SheetNames.includes('ConsignorConsignee')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['ConsignorConsignee']);
+      await insertWithLogging('consignorConsignee', 'ConsignorConsignee', rows, (row) => ({
+        customerId: row.customerId,
+        transporterId: row.transporterId,
+        type: row.type,
+        gstin: row.gstin,
+        pan: row.pan,
+        aadhaar: row.aadhaar,
+        mobileNo: row.mobileNo,
+        name: row.name,
+        address: row.address,
+        partyBillingType: row.partyBillingType,
+        ratePeriod: row.ratePeriod,
+        labourChargeIncluded: toBoolean(row.labourChargeIncluded),
+        biltyChargeIncluded: toBoolean(row.biltyChargeIncluded),
+        accountNo: row.accountNo,
+        ifscCode: row.ifscCode,
+        upiIdOrMobileNo: row.upiIdOrMobileNo,
+      }));
+    }
+
+    if (workbook.SheetNames.includes('ItemDetails')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['ItemDetails']);
+      await insertWithLogging('itemDetails', 'ItemDetails', rows, (row) => ({
+        itemId: row.itemId,
+        locationId: row.locationId,
+        transporterId: row.transporterId,
+        customerID: row.customerID,
+        branchName: row.branchName,
+        stationName: row.stationName,
+        itemName: row.itemName,
+        per: row.per,
+        rate: Number(row.rate),
+        size: row.size,
+        hammali: Number(row.hammali),
+        biltyCharge: Number(row.biltyCharge),
+        doorDeliveryCharge: Number(row.doorDeliveryCharge),
+      }));
+    }
+
+    if (workbook.SheetNames.includes('ServiceProviderDetails')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['ServiceProviderDetails']);
+      await insertWithLogging('serviceProviderDetails', 'ServiceProviderDetails', rows, (row) => ({
+        serviceProviderId: row.serviceProviderId,
+        transporterId: row.transporterId,
+        gstin: row.gstin,
+        typeOfService: row.typeOfService,
+        empName: row.empName,
+        empMobileNo: row.empMobileNo,
+        empEmailId: row.empEmailId,
+        commissionRateType: row.commissionRateType,
+        commissionRateAmount: Number(row.commissionRateAmount),
+      }));
+    }
+
+    if (workbook.SheetNames.includes('User')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['User']);
+      await insertWithLogging('user', 'User', rows, (row) => ({
+        empId: row.empId,
+        transporterId: row.transporterId,
+        empName: row.empName,
+        empMobileNo: row.empMobileNo,
+        roleOfUser: row.roleOfUser,
+        panOrAadhaarOfUser: row.panOrAadhaarOfUser,
+        typeOfUserRights: row.typeOfUserRights,
+        branchName: row.branchName,
+      }));
+    }
+
+    if (workbook.SheetNames.includes('Station')) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Station']);
+      await insertWithLogging('station', 'Station', rows, (row) => ({
+        locationId: row.locationId,
+        empID: row.empID,
+        transporterId: row.transporterId,
+        stationName: row.stationName,
+        branchName: row.branchName,
+        shortNameForBranch: row.shortNameForBranch,
+        subBranchesName: row.subBranchesName,
+        address: row.address,
+        typeOfOffice: row.typeOfOffice,
+        typeOfService: row.typeOfService,
+        laborChargeRateOn: row.laborChargeRateOn,
+        typeOfLoading: row.typeOfLoading,
+        laborChargeRateAmount: Number(row.laborChargeRateAmount),
+      }));
+    }
+
+    res.status(200).json({ message: 'Upload completed', results: response });
   } catch (err) {
-    // Clean up the file in case of error
-    try {
-      await fs.unlink(filePath);
-    } catch (unlinkErr) {
-      console.error("Failed to delete file:", unlinkErr);
-    }
-
-    console.error("Excel processing error:", err);
-    return res.status(500).json({
-      error: "Failed to process Excel file",
-      details: err.message,
-    });
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };
-
-// Process User sheet
-const processUser = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    return prisma.user.upsert({
-      where: { email: String(row[0]) },
-      update: {
-        empName: row[1],
-        empMobileNo: row[2],
-        roleOfUser: row[3],
-        panOrAadhaarOfUser: row[4],
-        typeOfUserRights: row[5],
-        branchName: row[6],
-      },
-      create: {
-        email: String(row[0]),
-        empName: row[1],
-        empMobileNo: row[2],
-        roleOfUser: row[3],
-        panOrAadhaarOfUser: row[4],
-        typeOfUserRights: row[5],
-        branchName: row[6],
-      },
-    });
-  }));
-};
-
-// Process Transporter sheet
-const processTransporter = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    return prisma.transporter.upsert({
-      where: { gstin: String(row[0]) }, // Ensure gstin is a string
-      update: {
-        name: row[1],
-        logoUrl: row[2] || null, // Ensure it's either null or a string
-      },
-      create: {
-        name: row[1],
-        gstin: String(row[0]), // Ensure gstin is a string
-        logoUrl: row[2] || null,
-      },
-    });
-  }));
-};
-
-
-const processStation = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    const laborChargeRateAmount = isNaN(parseFloat(row[9])) ? 0 : parseFloat(row[9]);
-
-    return prisma.station.upsert({
-      where: {
-        id: row[0], // Ensure the id is valid and is an integer
-      },
-      update: {
-        branchName: row[1],
-        shortNameForBranch: row[2],
-        subBranchesName: row[3],
-        address: row[4],
-        typeOfOffice: row[5],
-        typeOfService: row[6],
-        laborChargeRateOn: row[7],
-        typeOfLoading: row[8],
-        laborChargeRateAmount: laborChargeRateAmount,  // Ensured as float
-      },
-      create: {
-        id: row[0], // Ensure the id is valid and is an integer
-        stationName: String(row[0]),  // Convert stationName to a string
-        branchName: row[1],
-        shortNameForBranch: row[2],
-        subBranchesName: row[3],
-        address: row[4],
-        typeOfOffice: row[5],
-        typeOfService: row[6],
-        laborChargeRateOn: row[7],
-        typeOfLoading: row[8],
-        laborChargeRateAmount: laborChargeRateAmount,  // Ensured as float
-      },
-    });
-  }));
-};
-
-
-const processConsignorConsignee = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    // Ensure locationID is passed as a string
-    const locationID = String(row[0]);
-
-    // Ensure rateAmount is valid and parse it
-    const rateAmount = isNaN(parseFloat(row[8])) ? 0 : parseFloat(row[8]);
-
-    // Convert ratePeriod to a string
-    const ratePeriod = String(row[9]);
-
-    // Ensure boolean fields are parsed correctly
-    const labourChargeIncluded = row[10] === 'true'; 
-    const biltyChargeIncluded = row[11] === 'true'; 
-
-    // Ensure doorDeliveryCharge is a valid number
-    const doorDeliveryCharge = isNaN(parseFloat(row[12])) ? 0 : parseFloat(row[12]);
-
-    // Convert accountNo to string
-    const accountNo = String(row[13]);
-
-    return prisma.consignorConsignee.upsert({
-      where: {
-        gstin: String(row[1]),  // Ensure gstin is passed as a string
-      },
-      update: {
-        locationID: locationID,  // Ensure locationID is passed as a string
-        pan: row[2],
-        aadhaar: row[3],
-        mobileNo: row[4],
-        name: row[5],
-        address: row[6],
-        partyBillingType: row[7],
-        rateAmount: rateAmount,
-        ratePeriod: ratePeriod, 
-        labourChargeIncluded: labourChargeIncluded,
-        biltyChargeIncluded: biltyChargeIncluded,
-        doorDeliveryCharge: doorDeliveryCharge,
-        accountNo: accountNo,
-        ifscCode: row[14],
-        upiIdOrMobileNo: row[15],
-      },
-      create: {
-        locationID: locationID,
-        gstin: String(row[1]),
-        pan: row[2],
-        aadhaar: row[3],
-        mobileNo: row[4],
-        name: row[5],
-        address: row[6],
-        partyBillingType: row[7],
-        rateAmount: rateAmount,
-        ratePeriod: ratePeriod, 
-        labourChargeIncluded: labourChargeIncluded,
-        biltyChargeIncluded: biltyChargeIncluded,
-        doorDeliveryCharge: doorDeliveryCharge,
-        accountNo: accountNo,
-        ifscCode: row[14],
-        upiIdOrMobileNo: row[15],
-      },
-    });
-  }));
-};
-
-
-// Process TruckDetails sheet
-const processTruckDetails = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    // Convert all relevant fields to correct types
-    
-    // String Fields
-    const truckNo = String(row[0]);  // Convert truckNo to string
-    const ownedOrRented = String(row[1]);
-    const truckProviderCompanyName = String(row[2]);
-    const truckProviderGstInOrPan = String(row[3]);
-    const truckProviderContactNo = String(row[4]);
-    const truckProviderContactName = String(row[5]);
-    const driverName = String(row[7]);
-    const driverMobileNo = String(row[8]);
-    const driverLicenseNo = String(row[9]);
-    const typeOfTruck = String(row[10]);
-    const rtoLicenseNo = String(row[15]);
-    const fastagProvider = String(row[18]);
-    const dieselOrPetrol = String(row[19]);
-    const typeOfFuelCard = String(row[20]);
-    const cardNo = String(row[21]);
-    const insuranceProvider = String(row[23]);
-    const insuranceAccountNo = String(row[24]);
-    const loanProvider = String(row[28]);
-    const brand = String(row[14]); // Convert brand to string
-
-    
-    // Number Fields (ensure conversion to Float or Integer)
-    const freightCharge = isNaN(parseFloat(row[6])) ? 0 : parseFloat(row[6]);
-    const weightOfTruck = isNaN(parseFloat(row[12])) ? 0 : parseFloat(row[12]);
-    const premiumAmount = isNaN(parseFloat(row[25])) ? 0 : parseFloat(row[25]);
-    const loanAmount = isNaN(parseFloat(row[30])) ? 0 : parseFloat(row[30]);
-
-    // Boolean Fields (convert to true/false)
-    const nationalPermit = row[13] === 'true';  // Convert string "true" to boolean
-    const fastag = row[16] === 'true';  // Convert string "true" to boolean
-    const insurance = row[22] === 'true';  // Convert string "true" to boolean
-    const activeLoan = row[27] === 'true';  // Convert string "true" to boolean
-
-    // Date Fields (truckExpiry is assumed to be a Date string)
-    // const truckExpiry = new Date(row[11]); // Ensure it's converted to a valid Date object
-
-    const truckExpiry = Date.parse(row[11]) ? new Date(row[11]) : new Date(); // Use the current date if invalid
-  // Parsing the date
-
-    // Loan Interest Fields (convert to float)
-    const interest = isNaN(parseFloat(row[29])) ? 0 : parseFloat(row[29]);
-
-    // Ensure loanPeriod is a string
-    const loanPeriod = String(row[31]);
-
-    // Ensure fields are properly processed before upsert
-    return prisma.truckDetails.upsert({
-      where: {
-        id: row[0], // Use `id` if it's unique, otherwise truckNo or another unique field should be used
-      },
-      update: {
-        ownedOrRented: ownedOrRented,
-        truckProviderCompanyName: truckProviderCompanyName,
-        truckProviderGstInOrPan: truckProviderGstInOrPan,
-        truckProviderContactNo: truckProviderContactNo,
-        truckProviderContactName: truckProviderContactName,
-        freightCharge: freightCharge,
-        driverName: driverName,
-        driverMobileNo: driverMobileNo,
-        driverLicenseNo: driverLicenseNo,
-        typeOfTruck: typeOfTruck,
-        truckExpiry: truckExpiry,
-        weightOfTruck: weightOfTruck,
-        nationalPermit: nationalPermit,
-        brand: brand, // Assuming `brand` can be any value, but it's marked as a string
-        rtoLicenseNo: rtoLicenseNo,
-        fastag: fastag,
-        accountNo: String(row[17]), // Ensure accountNo is passed as a string
-        fastagProvider: fastagProvider,
-        dieselOrPetrol: dieselOrPetrol,
-        typeOfFuelCard: typeOfFuelCard,
-        cardNo: cardNo,
-        insurance: insurance,
-        insuranceProvider: insuranceProvider,
-        insuranceAccountNo: insuranceAccountNo,
-        premiumAmount: premiumAmount,
-        insurancePeriod: String(row[26]), // Ensure insurancePeriod is a string
-        activeLoan: activeLoan,
-        loanProvider: loanProvider,
-        interest: interest,
-        loanAmount: loanAmount,
-        loanPeriod: loanPeriod, // Ensure loanPeriod is a string
-      },
-      create: {
-        truckNo: truckNo,
-        ownedOrRented: ownedOrRented,
-        truckProviderCompanyName: truckProviderCompanyName,
-        truckProviderGstInOrPan: truckProviderGstInOrPan,
-        truckProviderContactNo: truckProviderContactNo,
-        truckProviderContactName: truckProviderContactName,
-        freightCharge: freightCharge,
-        driverName: driverName,
-        driverMobileNo: driverMobileNo,
-        driverLicenseNo: driverLicenseNo,
-        typeOfTruck: typeOfTruck,
-        truckExpiry: truckExpiry,
-        weightOfTruck: weightOfTruck,
-        nationalPermit: nationalPermit,
-        brand:brand, 
-        rtoLicenseNo: rtoLicenseNo,
-        fastag: fastag,
-        accountNo: String(row[17]), // Ensure accountNo is a string
-        fastagProvider: fastagProvider,
-        dieselOrPetrol: dieselOrPetrol,
-        typeOfFuelCard: typeOfFuelCard,
-        cardNo: cardNo,
-        insurance: insurance,
-        insuranceProvider: insuranceProvider,
-        insuranceAccountNo: insuranceAccountNo,
-        premiumAmount: premiumAmount,
-        insurancePeriod: String(row[26]), // Ensure insurancePeriod is a string
-        activeLoan: activeLoan,
-        loanProvider: loanProvider,
-        interest: interest,
-        loanAmount: loanAmount,
-        loanPeriod: loanPeriod, // Ensure loanPeriod is a string
-      },
-    });
-  }));
-};
-
-
-// Process ItemDetails sheet
-const processItemDetails = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    // Ensure string fields are properly processed
-    const locationID = String(row[0]);  // Convert locationID to string
-    const itemName = String(row[1]);  // Convert itemName to string
-    const hsnCode = String(row[2]);  // Convert hsnCode to string
-    const typeOfPackaging = String(row[3]);  // Convert typeOfPackaging to string
-    const size = String(row[4]);  // Convert size to string
-
-    // Ensure rate is a valid number and parse it
-    const rate = isNaN(parseFloat(row[5])) ? 0 : parseFloat(row[5]);
-
-    return prisma.itemDetails.upsert({
-      where: { id: row[0] },  // Use `id` as the unique identifier
-      update: {
-        itemName: itemName,  // itemName should be a string
-        hsnCode: hsnCode,  // hsnCode should be a string
-        typeOfPackaging: typeOfPackaging,  // typeOfPackaging should be a string
-        size: size,  // size should be a string
-        rate: rate,  // rate should be a float
-      },
-      create: {
-        locationID: locationID,  // locationID should be a string
-        itemName: itemName,  // itemName should be a string
-        hsnCode: hsnCode,  // hsnCode should be a string
-        typeOfPackaging: typeOfPackaging,  // typeOfPackaging should be a string
-        size: size,  // size should be a string
-        rate: rate,  // rate should be a float
-      },
-    });
-  }));
-};
-
-
-// Process ServiceProviderDetails sheet
-const processServiceProviderDetails = async (records) => {
-  await Promise.all(records.slice(1).map((row) => {
-    return prisma.serviceProviderDetails.upsert({
-      where: { id: row[0] },  // Use `id` as the unique identifier
-      update: {
-        gstin: String(row[1]),  // Convert `gstin` to string if necessary
-        typeOfService: String(row[2]),
-        empName: String(row[3]),
-        empMobileNo: String(row[4]),
-        empEmailId: String(row[5]),
-        commissionRateType: String(row[6]),
-        commissionRateAmount: parseFloat(row[7]),  // Ensure it's a float
-      },
-      create: {
-        id: row[0],  // Ensure the `id` is used for creating new records
-        gstin: String(row[1]),  // Convert `gstin` to string if necessary
-        typeOfService: String(row[2]),
-        empName: String(row[3]),
-        empMobileNo: String(row[4]),
-        empEmailId: String(row[5]),
-        commissionRateType: String(row[6]),
-        commissionRateAmount: parseFloat(row[7]),  // Ensure it's a float
-      },
-    });
-  }));
-};
-
-
