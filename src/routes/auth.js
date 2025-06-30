@@ -28,7 +28,8 @@ auth.post("/verify-otp", async (req, res) => {
   const { phoneNumber, otp } = req.body;
 
   try {
-    await confirmOTP(phoneNumber, otp);
+    const res = await confirmOTP(phoneNumber, otp);
+    console.log("-----The response of confirmOTP is :---->>",res);
     const payload = { phoneNumber }; // this will be encoded in token
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);

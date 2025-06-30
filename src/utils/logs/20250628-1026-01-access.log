@@ -1,0 +1,13 @@
+127.0.0.1 - POST /api/auth/send-otp 500 32 - 34.773 ms 2025-06-24T05:13:21.665Z
+127.0.0.1 - POST /api/auth/send-otp 200 35 - 3818.572 ms 2025-06-24T06:30:09.414Z
+127.0.0.1 - POST /api/auth/verify-otp 200 410 - 2912.525 ms 2025-06-24T06:30:59.535Z
+127.0.0.1 - GET /api/auth/resend-otp 404 158 - 33.083 ms 2025-06-24T06:32:14.228Z
+127.0.0.1 - POST /api/auth/resend-otp 500 34 - 39.654 ms 2025-06-24T06:32:33.252Z
+127.0.0.1 - POST /api/auth/resend-otp 200 37 - 2978.526 ms 2025-06-24T06:33:26.299Z
+127.0.0.1 - POST /api/auth/verify-otp 400 25 - 3081.857 ms 2025-06-24T06:52:09.924Z
+127.0.0.1 - POST /api/auth/resend-otp 200 37 - 524.218 ms 2025-06-24T06:52:18.299Z
+127.0.0.1 - POST /api/auth/verify-otp 400 25 - 444.913 ms 2025-06-24T06:52:32.948Z
+127.0.0.1 - POST /api/auth/verify-otp 400 25 - 3353.074 ms 2025-06-24T06:53:28.860Z
+127.0.0.1 - POST /api/auth/send-otp 500 32 - 3426.383 ms 2025-06-24T09:36:29.138Z
+127.0.0.1 - POST /api/auth/send-otp 200 35 - 3244.339 ms 2025-06-24T09:39:05.557Z
+127.0.0.1 - POST /api/auth/verify-otp 400 25 - 3347.900 ms 2025-06-24T10:10:30.850Z
