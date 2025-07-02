@@ -1,93 +1,80 @@
+// src/routes/auth.js
 const express = require("express");
-const { signUpWithPhone, confirmOTP,resendOTP,logoutUser } = require("../utils/cognito");
+const {
+  sendOTP,
+  verifyOTP,
+  logoutUser,
+  resendOTP
+} = require("../utils/cognito");
+// const { User } = require("../prisma/client"); // adjust this if you're using Prisma or another ORM
 
 const auth = express.Router();
-const {
-  generateAccessToken,
-  generateRefreshToken,
-} = require("../utils/jwt");
 
+// Register existing DB users to Cognito
+// auth.post("/register-db-users", async (req, res) => {
+//   try {
+//     const users = await User.findMany(); // for Prisma
+//     await registerUsersToCognito(users);
+//     res.json({ message: "Users registered to Cognito." });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to register users." });
+//   }
+// });
+
+// Start auth (send OTP)
 auth.post("/send-otp", async (req, res) => {
   const { phoneNumber } = req.body;
-
   try {
-    const response = await signUpWithPhone(phoneNumber);
-    console.log("----The response of the signin is :---->>>",response)
-    res.json({ message: "OTP sent successfully" });
-  } catch (err) {
-    if (err.code === "UsernameExistsException") {
-      res.status(409).json({ message: "User already exists" });
-    } else {
-      console.error(err);
-      res.status(500).json({ message: "Failed to send OTP" });
-    }
-  }
-});
-
-auth.post("/verify-otp", async (req, res) => {
-  const { phoneNumber, otp } = req.body;
-
-  try {
-    const res = await confirmOTP(phoneNumber, otp);
-    console.log("-----The response of confirmOTP is :---->>",res);
-    const payload = { phoneNumber }; // this will be encoded in token
-    const accessToken = generateAccessToken(payload);
-    const refreshToken = generateRefreshToken(payload);
-   
-    res.json({
-      message: "OTP verified successfully",
-      accessToken: accessToken,
-      refreshToken : refreshToken,
-    });
+    const response = await sendOTP(phoneNumber);
+    res.json({ message: "OTP sent successfully", session: response.Session });
   } catch (err) {
     console.error(err);
-    res.status(400).json({ message: "Invalid OTP" });
+    res.status(500).json({ message: "Failed to send OTP" });
   }
 });
 
 auth.post("/resend-otp", async (req, res) => {
   const { phoneNumber } = req.body;
-
   try {
-    await resendOTP(phoneNumber);
-    res.json({ message: "OTP resent successfully" });
+    const response = await resendOTP(phoneNumber);
+    res.json({ message: "OTP resent successfully", session: response.Session });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to resend OTP" });
   }
 });
 
+// Verify OTP
+auth.post("/verify-otp", async (req, res) => {
+  const { phoneNumber, otp, session } = req.body;
+  try {
+    const response = await verifyOTP(phoneNumber, otp, session);
+    res.json({
+      message: "OTP verified successfully",
+      accessToken: response.AuthenticationResult.AccessToken,
+      refreshToken: response.AuthenticationResult.RefreshToken,
+      idToken: response.AuthenticationResult.IdToken,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: "Invalid OTP or expired session" });
+  }
+});
+
+// Logout
 auth.post("/logout", async (req, res) => {
   const { accessToken } = req.body;
-
   if (!accessToken) {
-    return res.status(400).json({ message: "Access token is required" });
+    return res.status(400).json({ message: "Access token required" });
   }
 
   try {
     await logoutUser(accessToken);
-    res.json({ message: "User logged out successfully" });
+    res.json({ message: "Logged out successfully" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Logout failed" });
-  }
-});
-
-auth.post("/refresh-token", async (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(401).json({ message: "Refresh token is required" });
-  }
-
-  try {
-    const decoded = verifyRefreshToken(refreshToken);
-    const newAccessToken = generateAccessToken({ phoneNumber: decoded.phoneNumber });
-
-    res.json({ accessToken: newAccessToken });
-  } catch (err) {
-    console.error(err);
-    res.status(403).json({ message: "Invalid refresh token" });
   }
 });
 

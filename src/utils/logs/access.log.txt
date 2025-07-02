@@ -1,3 +1,2 @@
-C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250623-0202-01-access.log
-C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250624-1006-01-access.log
-C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250628-1026-01-access.log
+C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250701-0949-01-access.log
+C:\Users\Viionn User 3\Desktop\vidit\logi360-backend\src\utils\logs\20250702-0149-01-access.log
