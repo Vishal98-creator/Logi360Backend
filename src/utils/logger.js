@@ -1,8 +1,15 @@
-// logger.js
-const fs = require('fs');
-const path = require('path');
-const morgan = require('morgan');
+import fs from 'fs';
+import path from 'path';
+import morgan from 'morgan';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 const rfs = require('rotating-file-stream');
+
+// __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Create logs directory if it doesn't exist
 const logDirectory = path.join(__dirname, 'logs');
@@ -17,12 +24,8 @@ const accessLogStream = rfs.createStream('access.log', {
   maxFiles: 10             // keep logs for 10 days
 });
 
-// Define standard log format (IP, method, URL, status, response time)
+// Define standard log format
 const logFormat = ':remote-addr - :method :url :status :res[content-length] - :response-time ms :date[iso]';
 
-const loggerMiddleware = {
-  fileLogger: morgan(logFormat, { stream: accessLogStream }),
-  consoleLogger: morgan('dev') // optional: for real-time logs in console
-};
-
-module.exports = loggerMiddleware;
+export const fileLogger = morgan(logFormat, { stream: accessLogStream });
+export const consoleLogger = morgan('dev');

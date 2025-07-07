@@ -1,26 +1,13 @@
-// src/routes/auth.js
-const express = require("express");
-const {
-  sendOTP,
+
+import express from "express";
+
+import {  sendOTP,
   verifyOTP,
   logoutUser,
-  resendOTP
-} = require("../utils/cognito");
-// const { User } = require("../prisma/client"); // adjust this if you're using Prisma or another ORM
+  resendOTP, 
+  refreshAccessToken} from "../utils/cognito.js";
 
 const auth = express.Router();
-
-// Register existing DB users to Cognito
-// auth.post("/register-db-users", async (req, res) => {
-//   try {
-//     const users = await User.findMany(); // for Prisma
-//     await registerUsersToCognito(users);
-//     res.json({ message: "Users registered to Cognito." });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to register users." });
-//   }
-// });
 
 // Start auth (send OTP)
 auth.post("/send-otp", async (req, res) => {
@@ -78,4 +65,24 @@ auth.post("/logout", async (req, res) => {
   }
 });
 
-module.exports = auth;
+auth.post("/refresh-token", async (req, res) => {
+  const { refreshToken,phoneNumber } = req.body;
+  if (!refreshToken) {
+    return res.status(400).json({ message: "Refresh token required" });
+  }
+
+  try {
+    const response = await refreshAccessToken(refreshToken,phoneNumber);
+    res.json({
+      message: "Access token refreshed successfully",
+      accessToken: response.AccessToken,
+      refreshToken: response.RefreshToken,  // You may get a new refresh token as well
+      idToken: response.IdToken,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to refresh access token" });
+  }
+});
+
+export default auth;

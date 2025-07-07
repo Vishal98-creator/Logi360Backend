@@ -1,13 +1,18 @@
-const app = require('./app');
-const prisma = require('./utils/prisma');
-const { execSync } = require('child_process');
+import app from './app.js';
+import { getUserGroupFromIdToken, verifyAccessToken } from './utils/cognito.js';
+import migrateUsers from './utils/migrateUsers.js';
+import prisma from './utils/prisma.js';
+import { execSync } from 'child_process';
+import { URL } from 'url';
+
 const PORT = process.env.PORT || 5000;
+
+
 
 const startServer = async () => {
   try {
-    // console.log('📦 Syncing Prisma schema to DB...');
-    // execSync('npx prisma db push', { stdio: 'inherit' });
-
+   
+    await migrateUsers();  // Call the user migration function
     await prisma.$connect();
 
     const url = new URL(process.env.DATABASE_URL);

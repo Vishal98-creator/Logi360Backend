@@ -1,24 +1,33 @@
-const express = require("express");
-const { verifyToken } = require("../middleware/veriftToken");
-const { uploadInvoiceAndCreateOrder, getSignedInvoiceUrl, orderDetails } = require("../controllers/order.controller");
+import express from 'express';
+// import { verifyToken } from '../middleware/veriftToken.js';
+// import authenticate from '../middleware/authMiddleWare.js'; 
+import authenticate from '../middleware/authMiddleWare.js';
 
+import {
+    uploadInvoiceGetData,
+  uploadeInvoiceDemoData,
+  uploadAdditionalDocs,
+  createOrderConsignorConsignee,
+  createOrderItemDetails,
+  createOrderPaymentDetails,
+  createOrderGenerateBilty,
+  getSignedInvoiceUrl,
+  getOrderDetails,
+} from '../controllers/order.controller.js';
 
-const orderRouter = express.Router(); // ✅ FIXED LINE
+const orderRouter = express.Router();
 
-orderRouter.post("/uploade-invoice", uploadInvoiceAndCreateOrder);
-orderRouter.post("/uploade-additional-doc", orderDetails); //integrate this new order 4 figma can uploade multipal files 
-//get apis
-orderRouter.post("/get-invoice", getSignedInvoiceUrl); 
-orderRouter.post("/getorderDetails", orderDetails);// get order details
-//create order
-orderRouter.post("/orderDetails", orderDetails); //add screen first data in the order details table  
-orderRouter.post("/orderIteamDetails", orderDetails); //add order item details in the order and item and payment table(for paymoad)
-orderRouter.post("/payment/payForOrder", orderDetails);//pay for the order(when user pay create paymentId in order table and update payment table )
-orderRouter.post("/cancle-draft-order", orderDetails); // add ststus type to calcle (in ordertable )now user can not se this order
-orderRouter.post("/save-order-draft", orderDetails);// add status to draft
+orderRouter.use(authenticate);
+orderRouter.post('/uploade-invoice', uploadInvoiceGetData);
+orderRouter.post('/uploade-invoice-demo', uploadeInvoiceDemoData);
+orderRouter.post('/uploade-additional-doc', uploadAdditionalDocs);
 
-orderRouter.post("/generateBuilty", orderDetails);// (transporter table me logo ki details rhegi)
+orderRouter.post('/create-order/consignorConsigneeDetails', createOrderConsignorConsignee);
+orderRouter.post('/create-order/itemDetails', createOrderItemDetails);
+orderRouter.post('/create-order/paymentDetails', createOrderPaymentDetails);
+orderRouter.post('/create-order/generateBilty', createOrderGenerateBilty);
 
-//order
+orderRouter.post('/get-invoice', getSignedInvoiceUrl);
+orderRouter.post('/getorderDetails', getOrderDetails);
 
-module.exports = orderRouter;
+export default orderRouter;

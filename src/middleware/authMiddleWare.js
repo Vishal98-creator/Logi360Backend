@@ -1,4 +1,4 @@
-const { verifyAccessToken } = require("../utils/jwt");
+import { verifyAccessToken } from "../utils/cognito";
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -11,7 +11,7 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
-    req.user = decoded; // you can access req.user in controller
+    // req.user = decoded; // you can access req.user in controller
     next();
   } catch (err) {
     console.error(err);
@@ -27,4 +27,4 @@ const authenticate = (req, res, next) => {
 //   res.json({ message: `Secure data for ${phoneNumber}` });
 // });
 
-module.exports = authenticate;
+export default authenticate;
