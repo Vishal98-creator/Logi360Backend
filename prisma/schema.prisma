@@ -128,34 +128,99 @@ model ServiceProviderDetails {
 }
 
 model Station {
-  locationId            String      @id
-  empID                 Int
-  transporterId         String
-  transporter           Transporter @relation(fields: [transporterId], references: [transporterId])
-  stationName           String
-  branchName            String
-  shortNameForBranch    String
-  subBranchesName       String
-  address               String
-  typeOfOffice          String
-  typeOfService         String
-  laborChargeRateOn     String
+  stationId                   String     @id @default(cuid())
+  stationName          String
+  transporterId        String
+  typeOfOffice         String?
+  serviceProviderId Int?       // FK to ServiceProviderDetails
+ 
+  transporter          Transporter @relation(fields: [transporterId], references: [transporterId])
+  serviceProvider     ServiceProviderDetails? @relation(fields: [serviceProviderId], references: [serviceProviderId])
+  branches             Branch[]
+}
+
+model Branch {
+  branchId           String       @id @default(cuid())
+  stationId    String
+  branchName   String
+  shortName    String?
+  address      String?      // ✅ Optional — filled only if no sub-branches
+  typeOfService        String?
+ 
+
+  station      Station      @relation(fields: [stationId], references: [stationId])
+  subBranches  SubBranch[]
+  laborCharges LaborCharge[] @relation("BranchCharges")
+}
+
+model SubBranch {
+  subBranchId              String  @id @default(cuid())
+  branchId        String
+  name            String
+  address         String
+  typeOfService   String?
+
+  branch          Branch  @relation(fields: [branchId], references: [branchId ])
+}
+
+model LaborCharge {
+  id                    String   @id @default(cuid())
+  branchId              String?  // Nullable
+  subBranchId           String?  // Nullable
   typeOfLoading         String
   laborChargeRateAmount Float
+  laborChargeRateOn     String
+
+
+  // At least one of these two should be non-null:
+  branch                Branch?    @relation(fields: [branchId], references: [branchId])
+  subBranch             SubBranch? @relation(fields: [subBranchId], references: [subBranchId])
 }
+
+
 
 model User {
   empId              Int         @id @default(autoincrement())
   transporterId      String
   transporter        Transporter @relation(fields: [transporterId], references: [transporterId])
   empName            String
-  empMobileNo        String
+  empMobileNo        String      @unique
   emailId            String?     
-  roleOfUser         String
   panOrAadhaarOfUser String
   typeOfUserRights   String
-  branchName         String
+
+  roles              UserRole[]  // Many-to-many relationship with Role
 }
+
+model UserAssignment {
+  id            String   @id @default(cuid())
+  userId        Int
+  branchId      String?   // Nullable
+  subBranchId   String?   // Nullable
+
+  user          User      @relation(fields: [userId], references: [empId])
+  branch        Branch?   @relation(fields: [branchId], references: [branchId])
+  subBranch     SubBranch?@relation(fields: [subBranchId], references: [subBranchId])
+}
+
+model Role {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+
+  users       UserRole[]  // Many-to-many relationship with User
+}
+
+model UserRole {
+  userId  Int
+  roleId  Int
+
+  user    User @relation(fields: [userId], references: [empId])
+  role    Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])  // Composite key
+}
+
 
 model Order {
   orderId         String   @id

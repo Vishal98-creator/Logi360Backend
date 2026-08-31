@@ -12,6 +12,7 @@ import {
   GetUserCommand,
   AdminGetUserCommand,
   AdminAddUserToGroupCommand,
+  AdminSetUserPasswordCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const client_id = process.env.COGNITO_CLIENT_ID;
@@ -19,6 +20,8 @@ console.log("client_id: ", client_id);
 const client_secret = process.env.COGNITO_CLIENT_SECRET;
 const region = process.env.AWS_REGION;
 const user_pool_id = process.env.COGNITO_USER_POOL_ID;
+const client_id_admin = process.env.COGNITO_CLIENT_ID_ADMIN;
+const client_secret_admin = process.env.COGNITO_CLIENT_SECRET_ADMIN;
 
 const cognitoClient = new CognitoIdentityProviderClient({ region });
 
@@ -29,62 +32,234 @@ function getSecretHash(username, clientId, clientSecret) {
     .digest("base64");
 }
 
-const registerUsersToCognito = async (user) => {
-  const phoneNumber = user.empMobileNo;
-
+const loginUserWithEmailPassword = async (email, password) => {
+console.log('password: ', password);
+console.log('email: ', email);
   try {
-    // Check if user already exists in Cognito
-    const res = await cognitoClient.send(
-      new AdminGetUserCommand({
-        UserPoolId: user_pool_id,
-        Username: phoneNumber,
-      })
-    );
-    console.log(`⚠️ User already exists in Cognito: ${phoneNumber}`);
+    const secretHash = getSecretHash(email, client_id, client_secret);
+
+    const params = {
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: client_id,
+      AuthParameters: {
+        USERNAME: email,
+        PASSWORD: password,
+        SECRET_HASH: secretHash,
+      },
+    };
+
+    const command = new InitiateAuthCommand(params);
+    const response = await cognitoClient.send(command);
+    console.log('response: ', response);
+    
+    return response.AuthenticationResult;
   } catch (err) {
-    if (err.name === "UserNotFoundException") {
-      // User doesn't exist, so create the user
-      const params = {
-        UserPoolId: user_pool_id,
-        Username: phoneNumber,
-        UserAttributes: [
-          { Name: "phone_number", Value: phoneNumber },
-          { Name: "phone_number_verified", Value: "true" },
-          { Name: "name", Value: user.empName || "N/A" },
-          { Name: "email", Value: user.emailId }, // Add the emailId attribute
-          // { Name: "email_verified", Value: "true" }
-          // { Name: "custom:role", Value: user.roleOfUser },  // Add role as custom attribute
-        ],
-        DesiredDeliveryMediums: ["SMS"],
-        MessageAction: "SUPPRESS",
-      };
-
-      await cognitoClient.send(new AdminCreateUserCommand(params));
-      console.log(`✅ User registered to Cognito: ${phoneNumber}`);
-
-      const res = await cognitoClient.send(
-        new AdminAddUserToGroupCommand({
-          UserPoolId: user_pool_id,
-          Username: phoneNumber,
-          GroupName: user.roleOfUser, // Add user to the group based on their role
-        })
-      );
-      console.log(`✅ User added to ${user.roleOfUser} group`);
-    } else {
-      console.error(`❌ Error registering user: ${err.message}`);
-    }
+    console.error("❌ Login failed:", err);
   }
 };
 
+
+const setPermanentPassword = async (email, password) => {
+  const command = new AdminSetUserPasswordCommand({
+    UserPoolId: user_pool_id,
+    Username: email,
+    Password: password,
+    Permanent: true,
+  });
+  return cognitoClient.send(command);
+};
+
+
+
+// const registerUsersToCognito = async (user) => {
+//   const phoneNumber = user.empMobileNo;
+//   const email = user.emailId;
+//   const empName = user.empName || "N/A";
+//   let username, userAttributes, tempPassword;
+
+//   // Get roles for the user from the UserRole table
+//   const roles = await prisma.UserRole.findMany({
+//     where: {
+//       userId: user.empId,
+//     },
+//     include: {
+//       role: true,  // Fetch the role data (name, id)
+//     },
+//   });
+//   console.log(`roles for user ${empName}: --->> `, roles);
+ 
+//   for (const userRole of roles) {
+//     const roleName = userRole.role.name;
+
+//     if (roleName === "Admin") {
+//       // Admin login via email/password
+//       username = email;
+//       tempPassword = "Admin@123"; // Temporary password, generate securely in real app
+
+//       userAttributes = [
+//         { Name: "email", Value: email },
+//         { Name: "email_verified", Value: "true" },
+//         { Name: "phone_number", Value: phoneNumber },
+//         { Name: "phone_number_verified", Value: "true" },
+//         { Name: "name", Value: empName },
+//       ];
+//     } else {
+//       // Employee login via mobile OTP
+//       username = phoneNumber;
+//       userAttributes = [
+//         { Name: "phone_number", Value: phoneNumber },
+//         { Name: "phone_number_verified", Value: "true" },
+//         { Name: "email", Value: email },
+//         { Name: "name", Value: empName },
+//       ];
+//     }
+
+//     try {
+//       // Check if already registered in Cognito
+//       await cognitoClient.send(
+//         new AdminGetUserCommand({
+//           UserPoolId: user_pool_id,
+//           Username: username,
+//         })
+//       );
+//       console.log(`⚠️ User already exists: ${username}`);
+//     } catch (err) {
+//       if (err.name === "UserNotFoundException") {
+//         const params = {
+//           UserPoolId: user_pool_id,
+//           Username: username,
+//           UserAttributes: userAttributes,
+//           DesiredDeliveryMediums: ["EMAIL"],
+//           MessageAction: "SUPPRESS",
+//         };
+
+//         if (roleName === "Admin") {
+//           params.TemporaryPassword = tempPassword;
+//         }
+
+//         await cognitoClient.send(new AdminCreateUserCommand(params));
+//         console.log(`✅ User registered: ${username}`);
+
+//         if (roleName === "Admin") {
+//           console.log("==== The password set permanent is --->>>");
+//           await setPermanentPassword(username, tempPassword);
+//         }
+
+//         await cognitoClient.send(
+//           new AdminAddUserToGroupCommand({
+//             UserPoolId: user_pool_id,
+//             Username: username,
+//             GroupName: roleName, // Add user to corresponding Cognito group
+//           })
+//         );
+//         console.log(`✅ Added to group: ${roleName}`);
+//       } else {
+//         console.error(`❌ Registration error: ${err.message}`);
+//       }
+//     }
+//   }
+// };
+
+const registerUsersToCognito = async (user) => {
+  const phoneNumber = user.empMobileNo;
+  const email = user.emailId;
+  const empName = user.empName || "N/A";
+  let username = email; // Default username as email
+  let userAttributes, tempPassword;
+
+  // Get roles for the user from the UserRole table (many-to-many relationship)
+  const roles = await prisma.UserRole.findMany({
+    where: {
+      userId: user.empId,
+    },
+    include: {
+      role: true,  // Fetch the role data (name, id)
+    },
+  });
+
+  // Create the attributes based on the primary login method (email or phone)
+  userAttributes = [
+    { Name: "email", Value: email },
+    { Name: "email_verified", Value: "true" },
+    { Name: "phone_number", Value: phoneNumber },
+    { Name: "phone_number_verified", Value: "true" },
+    { Name: "name", Value: empName },
+  ];
+
+  // Check if user already exists in Cognito (by email)
+  try {
+    await cognitoClient.send(
+      new AdminGetUserCommand({
+        UserPoolId: user_pool_id,
+        Username: username, // First try with email as the username
+      })
+    );
+    console.log(`⚠️ User already exists: ${username}`);
+  } catch (err) {
+    if (err.name === "UserNotFoundException") {
+      // If the user doesn't exist, create the user
+      tempPassword = "Admin@123"; // Temporary password for admin
+
+      const params = {
+        UserPoolId: user_pool_id,
+        Username: username,
+        UserAttributes: userAttributes,
+        DesiredDeliveryMediums: ["EMAIL"],
+        MessageAction: "SUPPRESS",  // Prevent sending email automatically
+        TemporaryPassword :tempPassword
+      };
+
+      // if (roles.some(role => role.role.name === "Admin")) {
+      //   params.TemporaryPassword = tempPassword;
+      // }
+
+      await cognitoClient.send(new AdminCreateUserCommand(params));
+      console.log(`✅ User registered: ${username}`);
+
+      if (roles.some(role => role.role.name === "Admin")) {
+        console.log("==== The password set permanent is --->>>");
+        await setPermanentPassword(username, tempPassword);
+      }
+      for (const userRole of roles) {
+        const roleName = userRole.role.name;
+    
+        await cognitoClient.send(
+          new AdminAddUserToGroupCommand({
+            UserPoolId: user_pool_id,
+            Username: username,
+            GroupName: roleName, // Add user to the appropriate Cognito group
+          })
+        );
+        console.log(`✅ Added to group: ${roleName}`);
+      }
+    } else {
+      console.error(`❌ Registration error: ${err.message}`);
+    }
+  }
+
+  // Now add the user to the corresponding groups (roles) in Cognito
+ 
+};
+
+const getUser = async (phoneNumber) => {
+  try{
+    const user = await prisma.User.findFirst({
+      where: { empMobileNo: phoneNumber },
+    });
+    
+    if (!user) {
+      throw new Error("User not found in database");
+    }
+   console.log("-----The user is ----->>>",user)
+   return user;
+  }catch(error) {
+    console.error("Error getting the user :",error)
+  }
+ 
+}
+
 const sendOTP = async (phoneNumber) => {
-  // const user = await prisma.User.findUnique({
-  //   where: { empMobileNo: phoneNumber },
-  // });
-
-  // if (!user) {
-  //   throw new Error("User not found in database");
-  // }
-
+ const user = await getUser(phoneNumber);
   console.log(
     "==== The secret hash for sendOTP ====>>",
     getSecretHash(phoneNumber, client_id, client_secret)
@@ -94,8 +269,9 @@ const sendOTP = async (phoneNumber) => {
       AuthFlow: "CUSTOM_AUTH",
       ClientId: client_id,
       AuthParameters: {
-        USERNAME: phoneNumber,
-        SECRET_HASH: getSecretHash(phoneNumber, client_id, client_secret),
+        USERNAME: user.emailId,
+        // USERNAME: phoneNumber,
+        SECRET_HASH: getSecretHash(user.emailId, client_id, client_secret),
       },
     };
 
@@ -122,6 +298,7 @@ const resendOTP = async (phoneNumber) => {
 };
 
 const verifyOTP = async (phoneNumber, otp, session) => {
+  const user = await getUser(phoneNumber);
   console.log(
     "==== The secret hash for verifyOTP ====>>",
     getSecretHash(phoneNumber, client_id, client_secret)
@@ -131,9 +308,9 @@ const verifyOTP = async (phoneNumber, otp, session) => {
     ChallengeName: "CUSTOM_CHALLENGE",
     Session: session,
     ChallengeResponses: {
-      USERNAME: phoneNumber,
+      USERNAME: user.emailId,
       ANSWER: otp,
-      SECRET_HASH: getSecretHash(phoneNumber, client_id, client_secret),
+      SECRET_HASH: getSecretHash(user.emailId, client_id, client_secret),
     },
   };
   const command = new RespondToAuthChallengeCommand(params);
@@ -169,9 +346,39 @@ const getUserSub = async (phoneNumber) => {
   }
 };
 
-const refreshAccessToken = async (refreshToken, phoneNumber) => {
+const adminRefreshAccessToken = async (refreshToken, email) => {
   try {
-    const sub = await getUserSub(phoneNumber);
+    const sub = await getUserSub(email);
+    if (!sub) {
+      throw new Error("User sub (unique ID) not found.");
+    }
+
+    const secretHash = getSecretHash(sub, client_id, client_secret);
+    console.log("==== The secret hash for refreshToken ====>>", secretHash);
+
+    const params = {
+      AuthFlow: "REFRESH_TOKEN",
+      ClientId: client_id,
+      AuthParameters: {
+        REFRESH_TOKEN: refreshToken,
+        SECRET_HASH: secretHash,
+      },
+    };
+
+    const command = new InitiateAuthCommand(params);
+    const response = await cognitoClient.send(command);
+
+    return response.AuthenticationResult;
+  } catch (err) {
+    console.error("❌ Error refreshing access token:", err);
+    throw err;
+  }
+}
+
+const refreshAccessToken = async (refreshToken, phoneNumber) => {
+  const user = await getUser(phoneNumber)
+  try {
+    const sub = await getUserSub(user.emailId);
     if (!sub) {
       throw new Error("User sub (unique ID) not found.");
     }
@@ -231,5 +438,7 @@ export {
   verifyAccessToken,
   registerUsersToCognito,
   refreshAccessToken,
-  getUserGroupFromIdToken
+  getUserGroupFromIdToken,
+  loginUserWithEmailPassword,
+  adminRefreshAccessToken
 };

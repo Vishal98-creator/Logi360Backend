@@ -12,6 +12,10 @@ const migrateUsers = async () => {
       },
     });
 
+    if (users.length === 0) {
+      throw new Error("❌ No users found for migration!");
+    }
+
     console.log(`Migrating ${users.length} users to Cognito...`);
 
     for (const user of users) {

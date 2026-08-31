@@ -148,18 +148,81 @@ export const uploadMasterData = async (req, res) => {
       }));
     }
 
+    // if (workbook.SheetNames.includes('User')) {
+    //   const rows = XLSX.utils.sheet_to_json(workbook.Sheets['User']);
+    //   await insertWithLogging('user', 'User', rows, (row) => ({
+    //     empId: row.empId,
+    //     transporterId: row.transporterId,
+    //     empName: row.empName,
+    //     empMobileNo: row.empMobileNo,
+    //     roleOfUser: row.roleOfUser,
+    //     panOrAadhaarOfUser: row.panOrAadhaarOfUser,
+    //     typeOfUserRights: row.typeOfUserRights,
+    //     branchName: row.branchName,
+    //   }));
+    // }
+
+    // if (workbook.SheetNames.includes('User')) {
+    //   const rows = XLSX.utils.sheet_to_json(workbook.Sheets['User']);
+    //   await insertWithLogging('user', 'User', rows, (row) => {
+    //     // Split roleOfUser by comma or any delimiter used in the CSV to get multiple roles
+    //     const roles = row.roleOfUser ? row.roleOfUser.split(',').map(role => role.trim()) : [];
+    
+    //     return {
+    //       empId: row.empId,
+    //       transporterId: row.transporterId,
+    //       empName: row.empName,
+    //       empMobileNo: row.empMobileNo,
+    //       roleOfUser: roles, // This will store an array of roles
+    //       panOrAadhaarOfUser: row.panOrAadhaarOfUser,
+    //       typeOfUserRights: row.typeOfUserRights,
+    //       branchName: row.branchName,
+    //     };
+    //   });
+    // }
+    
     if (workbook.SheetNames.includes('User')) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets['User']);
-      await insertWithLogging('user', 'User', rows, (row) => ({
-        empId: row.empId,
-        transporterId: row.transporterId,
-        empName: row.empName,
-        empMobileNo: row.empMobileNo,
-        roleOfUser: row.roleOfUser,
-        panOrAadhaarOfUser: row.panOrAadhaarOfUser,
-        typeOfUserRights: row.typeOfUserRights,
-        branchName: row.branchName,
-      }));
+      for (const row of rows) {
+        const roles = row.roleOfUser ? row.roleOfUser.split(',').map(role => role.trim()) : [];
+        
+        // Insert user
+        const newUser = await prisma.User.create({
+          data: {
+            empId: row.empId,
+            transporterId: row.transporterId,
+            empName: row.empName,
+            empMobileNo: row.empMobileNo,
+            panOrAadhaarOfUser: row.panOrAadhaarOfUser,
+            typeOfUserRights: row.typeOfUserRights,
+            branchName: row.branchName,
+          }
+        });
+
+        // Insert and associate roles with the user
+        for (const roleName of roles) {
+          let role = await prisma.Role.findUnique({ where: { name: roleName } });
+
+          // If role does not exist, create it
+          if (!role) {
+            role = await prisma.Role.create({
+              data: {
+                name: roleName,
+                description: `${roleName} role description`, // You can customize the description
+              },
+            });
+          }
+
+          // Link the user with the role in the join table
+          await prisma.UserRole.create({
+            data: {
+              userId: newUser.empId,
+              roleId: role.id,
+            },
+          });
+        }
+      }
+      response.push({ table: 'User', inserted: rows.length });
     }
 
     if (workbook.SheetNames.includes('Station')) {
